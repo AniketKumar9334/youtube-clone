@@ -47,6 +47,6 @@ router.route("/cover-image").patch(verifyJWT, upload.single("coverImage"), updat
 
 router.route("/c/:username").get(verifyJWT, getUserChannelProfile)
 router.route("/history").get(verifyJWT, getWatchHistory)
-router.route("/delete-user").post(verifyJWT, deleteUser)
+router.route("/delete-user").delete(verifyJWT, deleteUser)
 
 export default router
