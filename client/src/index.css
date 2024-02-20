@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    outline: none;
+    border: 0;
+    font-family: "Roboto", sans-serif;
+}
+.sideBar::-webkit-scrollbar {
+    width: 7px;
+}
+.sideBar::-webkit-scrollbar-track {
+    background: gray;
+    border-radius: 5px;
+  }
+a {
+    text-decoration: none;
+    transition: all ease 0.3s;
+    cursor: pointer;
+}
+img {
+    display: block;
+    object-fit: cover;
+    width: 100%;
+    height: 100%;
+}
+span {
+    font-size: 0.9rem;
+}
+
+.active {
+    background-color: #f2f2f2;
+}
+
+.my-border{
+    border: 1px solid rgb(197, 197, 197);
+}
