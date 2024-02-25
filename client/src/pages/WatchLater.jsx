@@ -5,8 +5,8 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import ShuffleIcon from "@mui/icons-material/Shuffle";
 import { Link } from "react-router-dom";
-import LikedVideoView from "../components/LikedVideoView";
-const LikedVideos = () => {
+import VideoListSmallView from "../components/VideoListSmallView";
+const WatchLater = () => {
     return (
         <div className="flex gap-1 h-[85vh] overflow-hidden max-lg:flex-col max-lg:gap-3 ">
             <div className=" max-lg:h-fit flex flex-col h-full rounded-xl gap-3 p-6 bg-gradient-to-r from-stone-500 to-stone-700 ">
@@ -48,17 +48,17 @@ const LikedVideos = () => {
                 </div>
             </div>
             <div className="flex flex-col flex-1 overflow-y-scroll snap-x scroll-mx-2 ">
-                <LikedVideoView count={1}/>
-                <LikedVideoView count={2} />
-                <LikedVideoView count={3}/>
-                <LikedVideoView count={4}/>
-                <LikedVideoView count={5}/>
-                <LikedVideoView count={6}/>
-                <LikedVideoView count={7}/>
-
+                <VideoListSmallView />
+                <VideoListSmallView />
+                <VideoListSmallView />
+                <VideoListSmallView />
+                <VideoListSmallView />
+                <VideoListSmallView />
+                <VideoListSmallView />
+                <VideoListSmallView />
             </div>
         </div>
     );
 };
 
-export default LikedVideos;
+export default WatchLater;

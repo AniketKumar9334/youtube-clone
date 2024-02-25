@@ -1,17 +1,17 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 
 const SideBarItem = ({icon, to,title}) => {
     return (
-        <Link
+        <NavLink
             to={to}
-            className={`flex items-center gap-5 p-2 px-3 rounded-lg hover:bg-gray-200`}
+            className={({isActive}) => (isActive ? 'flex items-center gap-5 p-2 px-3 rounded-lg bg-gray-200' : 'flex items-center gap-5 p-2 px-3 rounded-lg hover:bg-gray-200 max-md:w-fit')}
         >
-            <span>
+            <span >
                 {icon}
             </span>
-            <span>{title}</span>
-        </Link>
+            <span className="max-md:hidden">{title}</span>
+        </NavLink>
     );
 };
 

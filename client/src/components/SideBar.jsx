@@ -1,10 +1,8 @@
-import MenuIcon from "@mui/icons-material/Menu";
-import LOGO from "../assites/youtube-logo.png";
 import HomeIcon from "@mui/icons-material/Home";
 import SubscriptionsOutlinedIcon from "@mui/icons-material/SubscriptionsOutlined";
 import VideoLibraryIcon from "@mui/icons-material/VideoLibrary";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
-import { Link } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import SideBarItem from "./SideBarItem";
 import OndemandVideoIcon from "@mui/icons-material/OndemandVideo";
 import AccountBoxOutlinedIcon from "@mui/icons-material/AccountBoxOutlined";
@@ -14,17 +12,12 @@ import ThumbUpOffAltIcon from "@mui/icons-material/ThumbUpOffAlt";
 import KeyboardArrowDownOutlinedIcon from "@mui/icons-material/KeyboardArrowDownOutlined";
 
 const SideBar = () => {
+    const id = "jfosjfi";
     return (
-        <div className="flex flex-col w-full">
+        <div className="flex flex-col w-full mt-16 max-md:w-fit max-md:items-center max-md:justify-center">
             <div className="flex flex-col w-full">
-                <div className="flex items-center gap-3 w-full px-2">
-                    <MenuIcon />
-                    <div className="w-28">
-                        <img src={LOGO} alt="" />
-                    </div>
-                </div>
-                <div className="sideBar w-full scroll-pl-10 hover:overflow-y-scroll">
-                    <div className="flex w-[98%] flex-col mt-3">
+                <div className="sideBar w-full hover:overflow-y-scroll">
+                    <div className="flex w-[98%] flex-col mt-3 max-md:w-fit max-md:gap-3">
                         <SideBarItem
                             to={"/"}
                             icon={<HomeIcon />}
@@ -42,18 +35,22 @@ const SideBar = () => {
                         />
                     </div>
                     <div className=" w-[98%] h-[1px] my-4 bg-gray-200"></div>
-                    <div className="flex flex-col  w-[98%]">
-                        <Link
+                    <div className="flex w-[98%] flex-col mt-3 max-md:w-fit max-md:gap-3">
+                        <NavLink
                             to={"/feed/you"}
-                            className="flex items-center gap-1 p-2 px-3 rounded-lg hover:bg-gray-200"
+                            className={({ isActive }) =>
+                                isActive
+                                    ? "flex items-center gap-5 p-2 px-3 rounded-lg bg-gray-200"
+                                    : "flex items-center gap-5 p-2 px-3 rounded-lg max-md:gap-0 hover:bg-gray-200"
+                            }
                         >
                             <p className="font-bold">You</p>
-                            <span>
+                            <span className="max-md:hidden">
                                 <KeyboardArrowRightIcon />
                             </span>
-                        </Link>
+                        </NavLink>
                         <SideBarItem
-                            to={"/my-channel"}
+                            to={`/channel/${id}`}
                             icon={<AccountBoxOutlinedIcon />}
                             title={"Your channel"}
                         />
@@ -79,7 +76,7 @@ const SideBar = () => {
                         />
                     </div>
                     <SideBarItem
-                        to={"#"}
+                        to={"/jijalf"}
                         icon={<KeyboardArrowDownOutlinedIcon />}
                         title={"Show more"}
                     />

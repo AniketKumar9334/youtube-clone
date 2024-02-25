@@ -30,7 +30,7 @@ const generateAccessAndRefereshTokens = async (userId) => {
 };
 
 const registerUser = asyncHandler(async (req, res) => {
-    const { fullName, email, username, password } = req.body;
+    const { fullName, email, username, password, about } = req.body;
     const avatarLocalPath = req.files?.avatar[0]?.path;
 
     let coverImageLocalPath;
@@ -47,7 +47,7 @@ const registerUser = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Avatar file is required");
     }
     if (
-        [fullName, email, username, password].some(
+        [fullName, email, username, password, about].some(
             (field) => field?.trim() === ""
         )
     ) {
@@ -75,6 +75,7 @@ const registerUser = asyncHandler(async (req, res) => {
         coverImage: coverImageLocalPath || "",
         email,
         password,
+        about,
         username: username.toLowerCase(),
     });
 
