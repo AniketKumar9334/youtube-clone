@@ -3,6 +3,7 @@ import {
     deleteVideo,
     getAllVideos,
     getVideoById,
+    getVideoDetailsIChunks,
     publishAVideo,
     togglePublishStatus,
     updateVideo,
@@ -11,7 +12,6 @@ import {verifyJWT} from "../middlewares/auth.middleware.js"
 import {upload} from "../middlewares/videoMulter.midleware.js   "
 
 const router = Router();
-router.use(verifyJWT); // Apply verifyJWT middleware to all routes in this file
 
 router
     .route("/")
@@ -28,15 +28,17 @@ router
             },
             
         ]),
+        verifyJWT,
         publishAVideo
     );
 
 router
     .route("/:videoId")
     .get(getVideoById)
-    .delete(deleteVideo)
-    .patch(upload.single("thumbnail"), updateVideo);
+    .delete(verifyJWT, deleteVideo)
+    .patch(upload.single("thumbnail"),verifyJWT, updateVideo);
 
-router.route("/toggle/publish/:videoId").patch(togglePublishStatus);
+router.route("/video-stream/:videoId").get(getVideoDetailsIChunks)
+router.route("/toggle/publish/:videoId").patch(verifyJWT, togglePublishStatus);
 
 export default router

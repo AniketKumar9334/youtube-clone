@@ -31,11 +31,24 @@ const userSchema = new Schema(
             index: true
         },
         avatar: {
-            type: String, // cloudinary url
-            required: true,
+            public_id:{
+                type: String, // cloudinary url
+                required: true,
+            },
+            url:{
+                type: String, // cloudinary url
+                required: true
+            }
         },
         coverImage: {
-            type: String, // cloudinary url
+            public_id:{
+                type: String, // cloudinary url
+                // required: true,
+            },
+            url:{
+                type: String, // cloudinary url
+                // required: true
+            }
         },
         watchHistory: [
             {
@@ -76,7 +89,7 @@ userSchema.methods.generateAccessToken = function(){
             username: this.username,
             fullName: this.fullName
         },
-        process.env.ACCESS_TOKEN_SECRET,
+        process.env.ACCESS_TOKEN,
         {
             expiresIn: process.env.ACCESS_TOKEN_EXPIRY
         }
@@ -88,7 +101,7 @@ userSchema.methods.generateRefreshToken = function(){
             _id: this._id,
             
         },
-        process.env.REFRESH_TOKEN_SECRET,
+        process.env.REFRESH_TOKEN,
         {
             expiresIn: process.env.REFRESH_TOKEN_EXPIRY
         }
