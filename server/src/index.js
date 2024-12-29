@@ -24,7 +24,6 @@ cloudinary.config({
   });
 
 
-
 app.use(errorMiddleware)
 connectDB()
 .then(() => {

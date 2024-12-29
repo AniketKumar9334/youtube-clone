@@ -1,5 +1,6 @@
 import {v2 as cloudinary} from "cloudinary"
 import fs from "fs"
+import AWS from 'aws-sdk';
 
 
 
@@ -25,6 +26,27 @@ const uploadOnCloudinary = async (localFilePath) => {
         return null;
     }
 }
+
+AWS.config.update({
+    region: "ap-south-1",
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  });
+  
+  const s3 = new AWS.S3();
+  
+ export const uploadVideoToS3 = async (filePath, bucketName, key) => {
+    const fileStream = fs.createReadStream(filePath);
+  
+    const params = {
+      Bucket: bucketName,
+      Key: key,
+      Body: fileStream,
+      ContentType: 'video/mp4',
+    };
+  
+    return s3.upload(params).promise();
+  };
 
 
 const deleteOnCloudinary = async (publicId) => {

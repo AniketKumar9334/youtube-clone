@@ -12,6 +12,8 @@ import mongoose from "mongoose";
 import { rm } from "fs";
 import { deleteOnCloudinary, uploadOnCloudinary } from "../utils/cloudinary.js";
 import { sendToken } from "../utils/sendToken.js";
+import axios from "axios";
+
 
 const generateAccessAndRefereshTokens = async (userId) => {
     try {
@@ -34,7 +36,7 @@ const generateAccessAndRefereshTokens = async (userId) => {
 const registerUser = asyncHandler(async (req, res, next) => {
     const { fullName, email, username, password, about } = req.body;
     const avatarLocalPath = req.files?.avatar[0]?.path;
-
+    const coverImageLocalPath = req.files.coverImage[0].path
     let coverImage;
 
     //console.log("email: ", email);
@@ -58,6 +60,9 @@ const registerUser = asyncHandler(async (req, res, next) => {
     });
 
     if (existedUser) {
+        rm(avatarLocalPath, () => {
+            rm(coverImageLocalPath, () => {});
+        });
         return next(
             new ApiError(409, "User with email or username already exists")
         );
@@ -72,7 +77,7 @@ const registerUser = asyncHandler(async (req, res, next) => {
         Array.isArray(req.files.coverImage) &&
         req.files.coverImage.length > 0
     ) {
-        coverImage = await uploadOnCloudinary(req.files.coverImage[0].path);
+        coverImage = await uploadOnCloudinary(coverImageLocalPath);
     }
 
     const avatarUrl = await uploadOnCloudinary(avatarLocalPath);
@@ -427,11 +432,18 @@ const deleteUser = asyncHandler(async (req, res, next) => {
     const user = await User.findById(userId);
 
     userVideos.forEach(async (video) => {
-        rm(video.videoFile, () => {
-            rm(video.thumbnail, () => {
-                console.log("old image deleted");
-            });
+        // rm(video.videoFile, () => {
+        //     rm(video.thumbnail, () => {
+        //         console.log("old image deleted");
+        //     });
+        // });
+        const response = await axios.post(`${process.env.VIDEO_SRRVER_URL}/video`, {videoFile: video.videoFile} , {
+            headers: {
+                "Content-Type": "application/json",
+            }
         });
+        console.log(response.data.message); 
+        await deleteOnCloudinary(video.thumbnail.public_id);
         await Video.findByIdAndDelete(video._id);
         await Comment.deleteMany({ video: video._id });
         await Like.deleteMany({ video: video._id });

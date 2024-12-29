@@ -8,8 +8,14 @@ const videoSchema = new Schema(
             required: true,
         },
         thumbnail: {
-            type: String,
-            required: true,
+            public_id:{
+                type: String, // cloudinary url
+                required: true,
+            },
+            url:{
+                type: String, // cloudinary url
+                required: true
+            }
         },
         title: {
             type: String,
@@ -23,10 +29,12 @@ const videoSchema = new Schema(
             type: Number,
             required: true,
         },
-        views: {
-            type: Number,
-            default: 0,
-        },
+        views: [
+            {
+                type: Schema.Types.ObjectId,
+                ref: "User",
+            }
+        ],
         isPublished: {
             type: Boolean,
             default: true,

@@ -7,8 +7,12 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { getVideoDuration } from "../utils/getVideoDuration.js";
-import fs, { rm } from "fs";
+import fs, {rm } from "fs";
 import { Like } from "../models/like.model.js";
+import { v4 as uuidv4 } from "uuid";
+import { deleteOnCloudinary, uploadOnCloudinary, uploadVideoToS3 } from "../utils/cloudinary.js";
+import axios from "axios";
+
 
 
 const getAllVideos = asyncHandler(async (req, res, next) => {
@@ -77,7 +81,7 @@ const getAllVideos = asyncHandler(async (req, res, next) => {
 
 const publishAVideo = asyncHandler(async (req, res, next) => {
     const { title, description } = req.body;
-    const videoLocalPath = req.files.videoFile[0].path;
+    const videoLocalPath = req.files?.videoFile[0]?.path;
 
     const thumbnailLocalPath = req.files.thumbnail[0].path;
     // TODO: get video, upload to own server, create video
@@ -85,6 +89,7 @@ const publishAVideo = asyncHandler(async (req, res, next) => {
     if (!videoLocalPath || !thumbnailLocalPath) {
         return next(new ApiError(400, "Video and thumbnail are required..."));
     }
+
     if (!title || !description) {
         rm(videoLocalPath, () => {
             rm(thumbnailLocalPath, () => {
@@ -95,22 +100,29 @@ const publishAVideo = asyncHandler(async (req, res, next) => {
     }
     const videoDuration = await getVideoDuration(videoLocalPath);
 
+    const lessionId = uuidv4();
+    const videoKey = lessionId;
+    const videoUrl = videoKey;
+
+    const thumbnail = await uploadOnCloudinary(thumbnailLocalPath);
+    // Upload video to S3
+    await uploadVideoToS3(videoLocalPath, process.env.AWS_S3_BUCKET, `${videoKey}.mp4`);
+
+
     const newVideo = await Video.create({
-        videoFile: videoLocalPath,
-        thumbnail: thumbnailLocalPath,
+        videoFile: videoUrl,
+        thumbnail: {
+            public_id: thumbnail.public_id,
+            url: thumbnail.url,
+        },
         title,
         description,
         duration: videoDuration,
         owner: req.user._id,
     });
-    if (!newVideo) {
-        rm(videoLocalPath, () => {
-            rm(thumbnailLocalPath, () => {
-                console.log("remove");
-            });
-        });
-        return next(new ApiError(400, "Video not created"));
-    }
+  
+    fs.unlinkSync(videoLocalPath);
+
     res.status(201).json(
         new ApiResponse(201, newVideo, "Video created successfully")
     );
@@ -214,41 +226,20 @@ const getVideoDetailsIChunks = asyncHandler(async (req, res, next) => {
     if (!video) {
         return next(new ApiError(404, "Video not found"));
     }
+    const videoOwner = await User.findById(video.owner)
+    const user = await User.findById(req.user._id);
 
-    const videoUrl = video.videoFile;
+    user.watchHistory.unshift(video._id);
+    if (!video.views.includes(req.user._id)) {
+        video.views.unshift(user._id);
+    }
 
-    // Check if the video file exists
-    fs.stat(videoUrl, (err, stats) => {
-        if (err) {
-            return next(new ApiError(404, "This Video not found"));
-        }
+    await user.save();
+    await video.save();
 
-        const range = req.headers.range || 'bytes=0-499';
-        if (!range) {
-            return res.status(416).send("Range not specified");
-        }
-
-        const total = stats.size;
-        const parts = range.replace(/bytes=/, "").split("-");
-        const start = parseInt(parts[0], 10);
-        const end = parts[1] ? parseInt(parts[1], 10) : total - 1;
-
-        // Validate the range
-        if (start >= total || end >= total || start > end) {
-            return res.status(416).send("Requested range not satisfiable");
-        }
-
-        // Set the headers for the response
-        res.writeHead(206, {
-            "Content-Range": `bytes ${start}-${end}/${total}`,
-            "Accept-Ranges": "bytes",
-            "Content-Length": end - start + 1,
-            "Content-Type": "video/mp4",
-        });
-
-        // Create a read stream for the video file
-        const stream = fs.createReadStream(videoUrl, { start, end });
-        stream.pipe(res);
+    res.status(200).json({
+        message: "Video details fetched successfully",
+        video: video,
     });
 });
 
@@ -271,19 +262,22 @@ const updateVideo = asyncHandler(async (req, res, next) => {
         return next(new ApiError(400, "All filds are required..."));
     }
 
-
+    let thumbnailCloudinary
     if (thumbnail) {
-        rm(video.videoFile, () => {
-            console.log("remove");
-        });
+        await deleteOnCloudinary(video.thumbnail.public_id);
+        thumbnailCloudinary = await uploadOnCloudinary(thumbnail);
     }
+
 
     const updatedVideo = await Video.findByIdAndUpdate(
         videoId,
         {
             title,
             description,
-            thumbnail: thumbnail || video.thumbnail,
+            thumbnail: {
+                public_id: thumbnailCloudinary.public_id || video.thumbnail.public_id,
+                url: thumbnailCloudinary.url || video.thumbnail.url,
+            },
         },
         { new: true, runValidators: false }
     );
@@ -331,11 +325,13 @@ const deleteVideo = asyncHandler(async (req, res, next) => {
         await user.save();
     });
 
-    rm(video.videoFile, () => {
-        rm(video.thumbnail, () => {
-            console.log("remove");
-        });
+    await deleteOnCloudinary(video.thumbnail.public_id);
+    const response = await axios.post(`${process.env.VIDEO_SRRVER_URL}/video`, {videoFile: video.videoFile} , {
+        headers: {
+            "Content-Type": "application/json",
+        }
     });
+    console.log(response.data.message);
 
     await Video.findByIdAndDelete(videoId);
     res.status(200).json(

@@ -11,7 +11,7 @@ export const verifyJWT = asyncHandler(async (req, _, next) => {
         return next(new ApiError(401, "Please login to access this route"));
     }
 
-    const [, payloadBase64] = accessToken.split(".");
+    const [, payloadBase64] = accessToken?.split(".");
 
     // Decode the payload (Base64 URL Decode)
     const payload = JSON.parse(atob(payloadBase64));
