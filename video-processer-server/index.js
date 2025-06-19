@@ -1,146 +1,42 @@
+// Express server upload route
 import express from "express";
-import multer from "multer";
+import fileUpload from "express-fileupload";
 import fs from "fs";
 import path from "path";
-import dotenv from "dotenv";
 import { fileURLToPath } from "url";
-import cors from "cors";
-dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const app = express();
-app.use(express.json());
 
-const upload = multer({ dest: "uploads/" });
-app.post("/upload", upload.single("file"), (req, res) => {
-  const { resolution, videoKey } = req.body;
-  const file = req.file;
+app.use(fileUpload());
+app.use("/static", express.static(path.join(__dirname, "public")));
 
-  if (!file || !resolution || !videoKey) {
-    return res.status(400).send("Missing required fields");
+app.post("/upload/hls", (req, res) => {
+  const { videoKey, filePath } = req.body;
+  const file = req.files?.file;
+  
+  if (!file || !videoKey || !filePath) {
+    return res.status(400).send("Missing file or fields");
   }
 
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = path.dirname(__filename);
+  const savePath = path.join(__dirname, "uploads", videoKey, filePath);
+  const saveDir = path.dirname(savePath);
 
-  let folderName = videoKey.split(".")[0];
-
-  const uploadDir = path.join(__dirname, "video", folderName);
-  const outputPath = path.join(uploadDir, `${resolution}.mp4`);
-
-  // Create the directory if it doesn't exist
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-  }
-
-  // Move the file to the desired location
-  fs.rename(file.path, outputPath, (err) => {
-    if (err) {
-      return res.status(500).json({
-        message: "Error uploading file",
-        error: err.message,
-      });
-    }
-
-    res.json({
-      message: "File uploaded successfully",
-      path: outputPath,
-    });
-  });
-});
-
-app.post("/video", (req, res) => {
   try {
-    const { videoFile } = req?.body;
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-    const folderName = videoFile?.toString();
-    const uploadDir = path.join(__dirname, "video", folderName);
-
-    if (fs.existsSync(uploadDir)) {
-      fs.rmdirSync(uploadDir, { recursive: true });
-      res.json({
-        message: "Video deleted successfully",
-      });
-    } else {
-      res.status(404).json({
-        message: "Video not found",
-      });
-    }
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({
-      message: "Error deleting video",
-      error: error.message,
-    });
-  }
-});
-
-app.get("/video/:videoKey", (req, res) => {
-  try {
-    const { videoKey } = req.params;
-    const { resolution } = req.body;
-
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-
-    const folderName = videoKey;
-    const uploadDir = path.join(__dirname, "video", folderName);
-    const videoPath = path.join(uploadDir, `${resolution}.mp4`);
-
-    if (fs.existsSync(videoPath)) {
-      const stat = fs.statSync(videoPath);
-      const fileSize = stat.size;
-      const range = req.headers.range;
-
-      if (range) {
-        const parts = range.replace(/bytes=/, "").split("-");
-        const start = parseInt(parts[0], 10);
-        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-
-        if (start >= fileSize) {
-          res
-            .status(416)
-            .send(
-              "Requested range not satisfiable\n" + start + " >= " + fileSize
-            );
-          return;
-        }
-
-        const chunksize = end - start + 1;
-        const file = fs.createReadStream(videoPath, { start, end });
-        const head = {
-          "Content-Range": `bytes ${start}-${end}/${fileSize}`,
-          "Accept-Ranges": "bytes",
-          "Content-Length": chunksize,
-          "Content-Type": "video/mp4",
-        };
-
-        res.writeHead(206, head);
-        file.pipe(res);
-      } else {
-        const head = {
-          "Content-Length": fileSize,
-          "Content-Type": "video/mp4",
-        };
-        res.writeHead(206, head);
-        fs.createReadStream(videoPath).pipe(res);
+    fs.mkdirSync(saveDir, { recursive: true });
+    file.mv(savePath, (err) => {
+      if (err) {
+        console.error("File save error:", err);
+        return res.status(500).send("Failed to save file");
       }
-    } else {
-      res.status(404).json({
-        message: "Video not found",
-      });
-    }
-  } catch (error) {
-    res.status(500).json({
-      message: "Error fetching video",
-      error: error.message,
+      res.send("Uploaded");
     });
+  } catch (err) {
+    console.error("Upload error:", err);
+    res.status(500).send("Error uploading file");
   }
 });
 
-app.get("/", (req, res) => {
-  res.send("Hello World!");
-});
-
-app.listen(process.env.PORT || 3000, () => {
-  console.log(`Server listening on port ${process.env.PORT || 3000}`);
-});
+app.listen(3000, () => console.log("Uploader server on port 3000"));
