@@ -19,64 +19,62 @@ const s3 = new AWS.S3();
 const queueUrl = process.env.QUE_URL;
 const bucketName = process.env.BUCKET_NAME;
 
-const receiveMessage = async () => {
-  const params = {
-    QueueUrl: queueUrl,
-    MaxNumberOfMessages: 1,
-    WaitTimeSeconds: 20,
-  };
+// const receiveMessage = async () => {
+//   const params = {
+//     QueueUrl: queueUrl,
+//     MaxNumberOfMessages: 1,
+//     WaitTimeSeconds: 20,
+//   };
 
-  while (true) {
-    try {
-      const data = await sqs.receiveMessage(params).promise();
-      if (data.Messages) {
-        for (const message of data.Messages) {
-          const { MessageId, Body } = message;
-          
+//   try {
+//     const data = await sqs.receiveMessage(params).promise();
+//     if (data.Messages) {
+//       for (const message of data.Messages) {
+//         const { Body } = message;
 
-          if (Body) {
-            const event = JSON.parse(Body);
-            if ("Service" in event && "Event" in event) {
-              if (event.Event === "s3:TestEvent") {
-                let deleteTestEvent = {
-                  QueueUrl: queueUrl,
-                  ReceiptHandle: message.ReceiptHandle,
-                };
-                await sqs.deleteMessage(deleteTestEvent).promise();
-                continue;
-              }
-            }
+//         if (Body) {
+//           const event = JSON.parse(Body);
+//           if ("Service" in event && event.Event === "s3:TestEvent") {
+//             await sqs
+//               .deleteMessage({
+//                 QueueUrl: queueUrl,
+//                 ReceiptHandle: message.ReceiptHandle,
+//               })
+//               .promise();
+//             process.exit(0); // exit gracefully
+//           }
 
-            for (const record of event.Records) {
-              const { eventName, s3 } = record;
-              const {
-                bucket,
-                object: { key },
-              } = s3;
+//           for (const record of event.Records) {
+//             const {
+//               object: { key },
+//             } = record.s3;
+//             console.log(`Processing video: ${key}`);
+//             await processVideo(key);
+//           }
 
-              // Process the video
-              console.log(`Processing video: ${key}`);
-              await processVideo(key);
-            }
+//           await sqs
+//             .deleteMessage({
+//               QueueUrl: queueUrl,
+//               ReceiptHandle: message.ReceiptHandle,
+//             })
+//             .promise();
 
-            // Delete the message from the queue
-            const deleteParams = {
-              QueueUrl: queueUrl,
-              ReceiptHandle: message.ReceiptHandle,
-            };
-            await sqs.deleteMessage(deleteParams).promise();
-          }
-        }
-      }
-    } catch (error) {
-      continue;
-      //   console.error("Error receiving message:", error);
-    }
-  }
-};
+//           process.exit(0); // ✅ EXIT container after 1 message is processed
+//         }
+//       }
+//     } else {
+//       console.log("No messages received. Exiting.");
+//       process.exit(0); // Exit if no messages in queue
+//     }
+//   } catch (error) {
+//     console.error("Error receiving message:", error);
+//     process.exit(1);
+//   }
+// };
 
 const processVideo = async (videoKey) => {
   const videoPath = path.join(__dirname, videoKey);
+  console.log(videoKey);
 
   const downloadParams = {
     Bucket: bucketName,
@@ -114,6 +112,8 @@ const generateHLS = async (videoKey, inputPath) => {
     { name: "480p", width: 854, height: 480, bitrate: 1400 },
     { name: "720p", width: 1280, height: 720, bitrate: 2800 },
     { name: "1080p", width: 1920, height: 1080, bitrate: 5000 },
+    { name: "1440p", width: 2560, height: 1440, bitrate: 8000 },
+    { name: "2160p", width: 3840, height: 2160, bitrate: 16000 },
   ];
 
   const baseOutputDir = path.join(
@@ -125,43 +125,58 @@ const generateHLS = async (videoKey, inputPath) => {
 
   const masterPlaylist = [];
 
-  for (const res of resolutions) {
-    const variantDir = path.join(baseOutputDir, res.name);
-    fs.mkdirSync(variantDir, { recursive: true });
+  // Launch all ffmpeg jobs concurrently
+  await Promise.all(
+    resolutions.map((res) => {
+      return new Promise((resolve, reject) => {
+        const variantDir = path.join(baseOutputDir, res.name);
+        fs.mkdirSync(variantDir, { recursive: true });
 
-    await new Promise((resolve, reject) => {
-      ffmpeg(inputPath)
-        .videoCodec("libx264")
-        .audioCodec("aac")
-        .addOptions([
-          "-preset veryfast",
-          `-b:v ${res.bitrate}k`,
-          `-maxrate ${res.bitrate}k`,
-          `-bufsize ${res.bitrate * 2}k`,
-          "-hls_time 10",
-          "-hls_list_size 0",
-          "-hls_segment_type mpegts",
-          "-hls_segment_filename",
-          `${variantDir}/segment_%03d.ts`,
-        ])
-        .size(`${res.width}x${res.height}`)
-        .output(path.join(variantDir, "index.m3u8"))
-        .on("end", () => {
-          console.log(`Finished ${res.name}`);
-          masterPlaylist.push({
-            resolution: `${res.width}x${res.height}`,
-            bandwidth: res.bitrate * 1024,
-            uri: `${res.name}/index.m3u8`,
-          });
-          resolve();
-        })
-        .on("error", (err) => {
-          console.error(`Error processing ${res.name}:`, err.message);
-          reject(err);
-        })
-        .run();
-    });
-  }
+        ffmpeg(inputPath)
+          .videoCodec("libx264")
+          .audioCodec("aac")
+          .addOptions([
+            "-preset veryfast",
+            `-b:v ${res.bitrate}k`,
+            `-maxrate ${Math.floor(res.bitrate * 1.07)}k`,
+            `-bufsize ${res.bitrate * 2}k`,
+            "-crf 20",
+            "-profile:v main",
+            "-level 4.1",
+            "-g 48",
+            "-keyint_min 48",
+            "-sc_threshold 0",
+            "-hls_time 4",
+            "-hls_playlist_type vod",
+            "-hls_segment_type mpegts",
+            "-hls_list_size 0",
+            "-hls_flags independent_segments",
+            "-force_key_frames expr:gte(t,n_forced*4)",
+            "-movflags +faststart",
+            "-y",
+            "-threads 4",
+            "-hls_segment_filename",
+            `${variantDir}/segment_%03d.ts`,
+          ])
+          .size(`${res.width}x${res.height}`)
+          .output(path.join(variantDir, "index.m3u8"))
+          .on("end", () => {
+            console.log(`✅ Finished ${res.name}`);
+            masterPlaylist.push({
+              resolution: `${res.width}x${res.height}`,
+              bandwidth: res.bitrate * 1024,
+              uri: `${res.name}/index.m3u8`,
+            });
+            resolve();
+          })
+          .on("error", (err) => {
+            console.error(`❌ Error processing ${res.name}:`, err.message);
+            reject(err);
+          })
+          .run();
+      });
+    })
+  );
 
   // Create master playlist
   const masterPath = path.join(baseOutputDir, "master.m3u8");
@@ -171,41 +186,40 @@ const generateHLS = async (videoKey, inputPath) => {
   }
 
   fs.writeFileSync(masterPath, masterContent);
-  console.log("Master playlist created.");
+  console.log("✅ Master playlist created.");
 
-  await uploadHLSFolder(videoKey, baseOutputDir); // Upload to server
-  // Wait briefly to ensure all file handles are closed before deletion
+  await uploadHLSFolder(videoKey, baseOutputDir);
   await new Promise((resolve) => setTimeout(resolve, 500));
- 
-  deleteFolder(baseOutputDir); // Clean it up manually
+  deleteFolder(baseOutputDir);
 };
 
 const uploadHLSFolder = async (videoKey, dirPath) => {
-  const serverUrl = "http://localhost:3000/upload/hls";
+  const serverUrl = "http://192.168.31.147:3000/upload/hls";
 
-  const uploadRecursive = (folder, relPath = "") => {
+  const uploadRecursive = (folder) => {
     const files = fs.readdirSync(folder);
 
     return Promise.all(
       files.map(async (file) => {
         const fullPath = path.join(folder, file);
-        const relFilePath = path.join(relPath, file);
 
         if (fs.statSync(fullPath).isDirectory()) {
-          return uploadRecursive(fullPath, relFilePath);
+          return uploadRecursive(fullPath);
         } else {
+          const relFilePath = path.relative(dirPath, fullPath); // 👈 must be RELATIVE
+
           const formData = new FormData();
           formData.append("file", fs.createReadStream(fullPath));
-          formData.append("videoKey", videoKey);
+          formData.append("videoKey", path.basename(videoKey)); // ✅ get just folder name
           formData.append("filePath", relFilePath);
 
           try {
             await axios.post(serverUrl, formData, {
               headers: formData.getHeaders(),
             });
-            console.log(`Uploaded ${relFilePath}`);
+            console.log(`✅ Uploaded ${relFilePath}`);
           } catch (err) {
-            console.error(`Failed to upload ${relFilePath}:`, err.message);
+            console.error(`❌ Failed to upload ${relFilePath}:`, err.message);
           }
         }
       })
@@ -236,12 +250,11 @@ const deleteFolder = async (folderPath, attempts = 3) => {
       return;
     } catch (err) {
       console.warn(`Attempt ${i + 1} failed: ${err.message}`);
-      await new Promise(res => setTimeout(res, 500)); // wait before retry
+      await new Promise((res) => setTimeout(res, 500)); // wait before retry
     }
   }
   console.error("Failed to delete after multiple attempts:", folderPath);
 };
-
 
 const deleteFolderRecursive = (folderPath) => {
   if (fs.existsSync(folderPath)) {
@@ -267,4 +280,14 @@ const deleteFolderRecursive = (folderPath) => {
 };
 
 // Start receiving messages
-receiveMessage();
+// receiveMessage();
+
+const videoKey = process.env.VIDEO_KEY;
+// const videoKey = "b35de032-f642-42db-9d65-8974dd7aad90.mp4";
+
+if (!videoKey) {
+  console.error("❌ No VIDEO_KEY provided");
+  process.exit(1);
+}
+
+processVideo(videoKey);
