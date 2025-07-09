@@ -13,7 +13,7 @@ function App() {
     responsive: true,
     fluid: true,
     sources: [{
-      src: "http://192.168.31.147:3000/upload/hls/9c0ddbd1-5216-40d2-9d45-6b9154162232/master.m3u8",
+      src: "http://192.168.31.147:3000/upload/hls/2a694ca2-4055-4982-bd11-3536110b786f/master.m3u8",
       type: "application/x-mpegURL"
     }]
   };

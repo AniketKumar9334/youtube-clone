@@ -63,7 +63,6 @@ const bucketName = process.env.BUCKET_NAME;
 //         }
 //       }
 //     } else {
-//       console.log("No messages received. Exiting.");
 //       process.exit(0); // Exit if no messages in queue
 //     }
 //   } catch (error) {
@@ -74,7 +73,6 @@ const bucketName = process.env.BUCKET_NAME;
 
 const processVideo = async (videoKey) => {
   const videoPath = path.join(__dirname, videoKey);
-  console.log(videoKey);
 
   const downloadParams = {
     Bucket: bucketName,
@@ -113,83 +111,109 @@ const generateHLS = async (videoKey, inputPath) => {
     { name: "720p", width: 1280, height: 720, bitrate: 2800 },
     { name: "1080p", width: 1920, height: 1080, bitrate: 5000 },
     { name: "1440p", width: 2560, height: 1440, bitrate: 8000 },
-    { name: "2160p", width: 3840, height: 2160, bitrate: 16000 },
+    // { name: "2160p", width: 3840, height: 2160, bitrate: 16000 },
   ];
 
   const baseOutputDir = path.join(
     __dirname,
     "hls",
-    path.basename(videoKey, ".mp4")
+    path.basename(videoKey, path.extname(videoKey))
   );
   fs.mkdirSync(baseOutputDir, { recursive: true });
 
   const masterPlaylist = [];
 
-  // Launch all ffmpeg jobs concurrently
-  await Promise.all(
-    resolutions.map((res) => {
-      return new Promise((resolve, reject) => {
-        const variantDir = path.join(baseOutputDir, res.name);
-        fs.mkdirSync(variantDir, { recursive: true });
+  for (const res of resolutions) {
+    const variantDir = path.join(baseOutputDir, res.name);
+    fs.mkdirSync(variantDir, { recursive: true });
 
-        ffmpeg(inputPath)
-          .videoCodec("libx264")
-          .audioCodec("aac")
-          .addOptions([
-            "-preset veryfast",
-            `-b:v ${res.bitrate}k`,
-            `-maxrate ${Math.floor(res.bitrate * 1.07)}k`,
-            `-bufsize ${res.bitrate * 2}k`,
-            "-crf 20",
-            "-profile:v main",
-            "-level 4.1",
-            "-g 48",
-            "-keyint_min 48",
-            "-sc_threshold 0",
-            "-hls_time 4",
-            "-hls_playlist_type vod",
-            "-hls_segment_type mpegts",
-            "-hls_list_size 0",
-            "-hls_flags independent_segments",
-            "-force_key_frames expr:gte(t,n_forced*4)",
-            "-movflags +faststart",
-            "-y",
-            "-threads 4",
-            "-hls_segment_filename",
-            `${variantDir}/segment_%03d.ts`,
-          ])
-          .size(`${res.width}x${res.height}`)
-          .output(path.join(variantDir, "index.m3u8"))
-          .on("end", () => {
-            console.log(`✅ Finished ${res.name}`);
-            masterPlaylist.push({
-              resolution: `${res.width}x${res.height}`,
-              bandwidth: res.bitrate * 1024,
-              uri: `${res.name}/index.m3u8`,
-            });
-            resolve();
-          })
-          .on("error", (err) => {
-            console.error(`❌ Error processing ${res.name}:`, err.message);
-            reject(err);
-          })
-          .run();
-      });
-    })
-  );
+    const outputPath = path.join(variantDir, "index.m3u8");
+    const segmentPattern = path.join(variantDir, "segment_%03d.ts");
 
-  // Create master playlist
-  const masterPath = path.join(baseOutputDir, "master.m3u8");
-  let masterContent = "#EXTM3U\n";
-  for (const stream of masterPlaylist) {
-    masterContent += `#EXT-X-STREAM-INF:BANDWIDTH=${stream.bandwidth},RESOLUTION=${stream.resolution}\n${stream.uri}\n`;
+    await new Promise((resolve, reject) => {
+      ffmpeg(inputPath)
+        .inputOptions("-loglevel", "error") // only show errors
+        .videoCodec("libx264")
+        .audioCodec("aac")
+        .size(`${res.width}x${res.height}`)
+        .addOptions([
+          "-preset",
+          "medium", // better compression
+          "-b:v",
+          `${res.bitrate}k`,
+          "-maxrate",
+          `${Math.floor(res.bitrate * 1.07)}k`,
+          "-bufsize",
+          `${res.bitrate * 2}k`,
+          "-profile:v",
+          "main",
+          "-level",
+          "4.1",
+          "-g",
+          "48",
+          "-keyint_min",
+          "48",
+          "-sc_threshold",
+          "0",
+          "-hls_time",
+          "4", // shorter segment duration
+          "-hls_playlist_type",
+          "vod",
+          "-hls_segment_type",
+          "mpegts",
+          "-hls_list_size",
+          "0",
+          "-hls_flags",
+          "independent_segments",
+          "-force_key_frames",
+          "expr:gte(t,n_forced*4)",
+          "-movflags",
+          "+faststart",
+          "-threads",
+          "4",
+          "-hls_segment_filename",
+          segmentPattern,
+        ])
+
+        .output(outputPath)
+        .on("start", (cmd) => {
+          console.log(`🚀 Starting ${res.name} -> ${res.width}x${res.height}`);
+        })
+        .on("end", () => {
+          console.log(`✅ Done: ${res.name}`);
+          masterPlaylist.push({
+            resolution: `${res.width}x${res.height}`,
+            bandwidth: res.bitrate * 1024,
+            uri: `${res.name}/index.m3u8`,
+          });
+          resolve();
+        })
+        .on("error", (err, stdout, stderr) => {
+          console.error(`❌ FFmpeg error on ${res.name}:`, err.message);
+          console.error("📄 FFmpeg STDERR:\n", stderr);
+          reject(err);
+        })
+        .run();
+    });
   }
 
+  // Create master.m3u8
+  const masterPath = path.join(baseOutputDir, "master.m3u8");
+  const masterContent =
+    "#EXTM3U\n" +
+    masterPlaylist
+      .map(
+        (stream) =>
+          `#EXT-X-STREAM-INF:BANDWIDTH=${stream.bandwidth},RESOLUTION=${stream.resolution}\n${stream.uri}`
+      )
+      .join("\n") +
+    "\n";
+
   fs.writeFileSync(masterPath, masterContent);
-  console.log("✅ Master playlist created.");
+  console.log("🎉 Master playlist created at:", masterPath);
 
   await uploadHLSFolder(videoKey, baseOutputDir);
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  await new Promise((res) => setTimeout(res, 500));
   deleteFolder(baseOutputDir);
 };
 

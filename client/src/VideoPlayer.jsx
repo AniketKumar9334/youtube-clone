@@ -30,7 +30,6 @@ export const VideoJS = ({ options, onReady }) => {
       player.ready(() => {
         onReady && onReady(player);
       });
-
       playerRef.current = player;
     }
 
